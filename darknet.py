@@ -25,6 +25,7 @@ from ctypes import *
 import math
 import random
 import os
+import darknet_video
 
 
 class BOX(Structure):
@@ -84,6 +85,7 @@ def bbox2points(bbox):
     xmax = int(round(x + (w / 2)))
     ymin = int(round(y - (h / 2)))
     ymax = int(round(y + (h / 2)))
+
     return xmin, ymin, xmax, ymax
 
 
@@ -120,6 +122,7 @@ def load_network(config_file, data_file, weights, batch_size=1):
 
 
 def print_detections(detections, coordinates=False):
+    '''
     print("\nObjects:")
     cnt = 0
     for label, confidence, bbox in detections:
@@ -132,6 +135,7 @@ def print_detections(detections, coordinates=False):
             print("{}: {}%".format(label, confidence))
         cnt = cnt + 1
     print("\n>>>Detected Number:" + str(cnt))
+    '''
 
 
 def draw_boxes(detections, image, colors):
