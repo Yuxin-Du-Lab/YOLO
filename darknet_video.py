@@ -7,6 +7,8 @@ import darknet
 import argparse
 from threading import Thread, enumerate
 from queue import Queue
+from numpy import *
+import numpy as np
 
 # >>>total size
 # width=416
@@ -16,10 +18,38 @@ weights = "./backup/yolov4-head_last.weights"
 cfg = "./cfg/yolov4-head-test.cfg"
 data = "./cfg/voc-head.data"
 thresh = .50
-#video = 1  # 0 is laptop; 2 is internet
+# video = 1  # 0 is laptop; 2 is internet
 video = "./mydata/airport.mp4"
+# video = "./mydata/station.mp4"
+
+buffer_queueMaxSize = 10
+
 
 # myclass:
+class myQueue:
+    list = []
+    MAXSIZE = 0
+
+    def __init__(self, maxsize):
+        self.MAXSIZE = maxsize
+
+    def push(self, element):
+        if len(self.list) < self.MAXSIZE:
+            self.list.append(element)
+        else:
+            self.pop()
+            self.list.append(element)
+
+    def pop(self):
+        if len(self.list) == 0:
+            print("empty queue!")
+        else:
+            self.list.pop(0)
+
+    def check(self):
+        return self.list
+
+
 class POINT:
     x = 0.0
     y = 0.0
@@ -46,6 +76,7 @@ class FILTER:
         else:
             notFinish = False
         scanBoxes = []
+        print("INIT: size of scanList:" + str(len(scanBoxes)))
         while notFinish:
             # list which points are in the filter
             inPoints = listIn(curruntPointList, self.centerX, self.centerY, self.WIDTH)
@@ -53,19 +84,23 @@ class FILTER:
             if numIn > 0:
                 average = averageSize(inPoints, numIn)
                 maxNum = (self.WIDTH ** 2) / (average)
+                maxNum = log(maxNum)
                 if maxNum > 1:
                     threshold = self.CONST * maxNum
                 else:
                     threshold = 1.5
                 current = numIn
                 scanbox = SCANBOX(self.WIDTH, self.centerX, self.centerY, current, threshold)
-                scanBoxes.append(scanbox)
+            else:
+                scanbox = SCANBOX(self.WIDTH, self.centerX, self.centerY, 0, 1)
+            scanBoxes.append(scanbox)
             notFinish = self.step()
+        print("size of scanList:" + str(len(scanBoxes)))
         return scanBoxes
 
     def step(self):
-        if self.centerY < self.BOUNDARY:
-            if self.centerX < self.BOUNDARY:
+        if self.centerY < self.BOUNDARY - 2 * self.STRIDE:
+            if self.centerX < self.BOUNDARY - self.STRIDE:
                 self.centerX += self.STRIDE
             else:
                 # X touch the Boundary
@@ -83,6 +118,7 @@ class SCANBOX:
     CENTERX = 0.0
     CENTERY = 0.0
     WIDTH = 0.0
+    RATIO = 0
 
     def __init__(self, width, centerX, centerY, current, threshold):
         self.WIDTH = width
@@ -90,6 +126,7 @@ class SCANBOX:
         self.CENTERY = centerY
         self.CURRENT = current
         self.THRESHOLD = threshold
+        self.RATIO = self.CURRENT / self.THRESHOLD
 
 
 def parser():
@@ -172,7 +209,7 @@ def inference(darknet_image_queue, detections_queue, fps_queue):
     cap.release()
 
 
-def drawing(frame_queue, detections_queue, fps_queue, curruntPointList):
+def drawing(frame_queue, detections_queue, fps_queue, curruntPointList, buffer_queue):
     random.seed(3)  # deterministic bbox colors
     video = set_saved_video(cap, args.out_filename, (width, height))
     while cap.isOpened():
@@ -189,7 +226,7 @@ def drawing(frame_queue, detections_queue, fps_queue, curruntPointList):
                 curruntPointList.append(point)
                 # print("\n" + str(detection[2][0]))
             ## loop end & point processing
-            pointProcessing(curruntPointList)
+            pointProcessing(curruntPointList, buffer_queue)
             ###########################
 
             image = darknet.draw_boxes(detections, frame_resized, class_colors)
@@ -205,7 +242,7 @@ def drawing(frame_queue, detections_queue, fps_queue, curruntPointList):
     cv2.destroyAllWindows()
 
 
-def pointProcessing(curruntPointList):
+def pointProcessing(curruntPointList, buffer_queue):
     print("hello,pointProcessing")
     num = len(curruntPointList)
     # calculate all boxes' average size:
@@ -221,24 +258,38 @@ def pointProcessing(curruntPointList):
                   + ",Y_" + str(point.y)
                   + ",SIZE_" + str(point.size))
             '''
-        print("average:" + str(average))
+        print("arage:" + str(average))
     filter = FILTER()
     scanBoxes = filter.scan(curruntPointList)
-    checkScanBoxes(scanBoxes)
+    curruntArray = Boxes2Array(scanBoxes)
+    bufferProcess(buffer_queue, curruntArray)
 
 
-def checkScanBoxes(scanBoxes):
-    for scanBox in scanBoxes:
-        '''
-        print("*********************")
-        print("THRESHOLD:" + str(scanBox.THRESHOLD))
-        print("CURRENT:" + str(scanBox.CURRENT))
-        print("CENTERX:" + str(scanBox.CENTERX))
-        print("CENTERY:" + str(scanBox.CENTERY))
-        print("WIDTH:" + str(scanBox.WIDTH))
-        '''
-        if scanBox.CURRENT>scanBox.THRESHOLD:
-            print(">>>>>>>>>>>WARNING<<<<<<<<<<<<<<<")
+def Boxes2Array(scanBoxes):
+    if len(scanBoxes) == 0:
+        # no object detected
+        curruntArray = np.zeros((15, 15))
+    else:
+        # object detected
+        list = []
+        for box in scanBoxes:
+            list.append(round(box.RATIO, 1))
+        curruntArray = np.array(list)
+        curruntArray = curruntArray.reshape((15, 15))
+    return curruntArray
+    # print(curruntArray)
+
+
+def bufferProcess(buffer_queue, curruntArray):
+    buffer_queue.push(curruntArray)
+    # check queue:
+    print("check queue")
+    cnt = 0
+    list = buffer_queue.check()
+    for array in list:
+        cnt += 1
+        print(str(cnt))
+        print(array)
 
 
 def averageSize(PointList, num):
@@ -262,6 +313,7 @@ def listIn(PointList, centerX, centerY, width):
 
 if __name__ == '__main__':
     curruntPointList = []
+    buffer_queue = myQueue(buffer_queueMaxSize)
 
     frame_queue = Queue()
     darknet_image_queue = Queue(maxsize=1)
@@ -282,4 +334,4 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(input_path)
     Thread(target=video_capture, args=(frame_queue, darknet_image_queue)).start()
     Thread(target=inference, args=(darknet_image_queue, detections_queue, fps_queue)).start()
-    Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue, curruntPointList)).start()
+    Thread(target=drawing, args=(frame_queue, detections_queue, fps_queue, curruntPointList, buffer_queue)).start()
