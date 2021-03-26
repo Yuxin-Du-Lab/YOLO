@@ -10,46 +10,14 @@ from queue import Queue
 from numpy import *
 import numpy as np
 
+from MyQueue import *
+from Filter import *
+from Headline import *
 # >>>total size
 # width=416
 # height=416
 
-weights = "./backup/yolov4-head_last.weights"
-cfg = "./cfg/yolov4-head-test.cfg"
-data = "./cfg/voc-head.data"
-thresh = .50
-# video = 1  # 0 is laptop; 2 is internet
-video = "./mydata/airport.mp4"
-# video = "./mydata/station.mp4"
-
-buffer_queueMaxSize = 10
-
-
 # myclass:
-class myQueue:
-    list = []
-    MAXSIZE = 0
-
-    def __init__(self, maxsize):
-        self.MAXSIZE = maxsize
-
-    def push(self, element):
-        if len(self.list) < self.MAXSIZE:
-            self.list.append(element)
-        else:
-            self.pop()
-            self.list.append(element)
-
-    def pop(self):
-        if len(self.list) == 0:
-            print("empty queue!")
-        else:
-            self.list.pop(0)
-
-    def check(self):
-        return self.list
-
-
 class POINT:
     x = 0.0
     y = 0.0
@@ -59,75 +27,6 @@ class POINT:
         self.x = xIn
         self.y = yIn
         self.size = sizeIn
-
-
-class FILTER:
-    centerX = 0.0
-    centerY = 0.0
-    # magic
-    CONST = 0.5
-    WIDTH = 52
-    STRIDE = 26
-    BOUNDARY = 416
-
-    def scan(self, curruntPointList):
-        if len(curruntPointList) > 0:
-            notFinish = True
-        else:
-            notFinish = False
-        scanBoxes = []
-        print("INIT: size of scanList:" + str(len(scanBoxes)))
-        while notFinish:
-            # list which points are in the filter
-            inPoints = listIn(curruntPointList, self.centerX, self.centerY, self.WIDTH)
-            numIn = len(inPoints)
-            if numIn > 0:
-                average = averageSize(inPoints, numIn)
-                maxNum = (self.WIDTH ** 2) / (average)
-                maxNum = log(maxNum)
-                if maxNum > 1:
-                    threshold = self.CONST * maxNum
-                else:
-                    threshold = 1.5
-                current = numIn
-                scanbox = SCANBOX(self.WIDTH, self.centerX, self.centerY, current, threshold)
-            else:
-                scanbox = SCANBOX(self.WIDTH, self.centerX, self.centerY, 0, 1)
-            scanBoxes.append(scanbox)
-            notFinish = self.step()
-        print("size of scanList:" + str(len(scanBoxes)))
-        return scanBoxes
-
-    def step(self):
-        if self.centerY < self.BOUNDARY - 2 * self.STRIDE:
-            if self.centerX < self.BOUNDARY - self.STRIDE:
-                self.centerX += self.STRIDE
-            else:
-                # X touch the Boundary
-                self.centerX = 0
-                self.centerY += self.STRIDE
-            return True
-        else:
-            # Y touch the Boundary
-            return False
-
-
-class SCANBOX:
-    THRESHOLD = 0.0
-    CURRENT = 0.0
-    CENTERX = 0.0
-    CENTERY = 0.0
-    WIDTH = 0.0
-    RATIO = 0
-
-    def __init__(self, width, centerX, centerY, current, threshold):
-        self.WIDTH = width
-        self.CENTERX = centerX
-        self.CENTERY = centerY
-        self.CURRENT = current
-        self.THRESHOLD = threshold
-        self.RATIO = self.CURRENT / self.THRESHOLD
-
 
 def parser():
     parser = argparse.ArgumentParser(description="YOLO Object Detection")
@@ -284,14 +183,17 @@ def bufferProcess(buffer_queue, curruntArray):
     buffer_queue.push(curruntArray)
     # check queue:
     print("check queue")
+    '''
     cnt = 0
     list = buffer_queue.check()
     for array in list:
         cnt += 1
         print(str(cnt))
         print(array)
+    '''
+    buffer_queue.check()
 
-
+'''
 def averageSize(PointList, num):
     average = 0.0
     if num > 0:
@@ -299,17 +201,7 @@ def averageSize(PointList, num):
             average += point.size
         average /= num
     return average
-
-
-def listIn(PointList, centerX, centerY, width):
-    inPoints = []
-    for point in PointList:
-        if ((point.x > centerX) & (point.x < (centerX + width))
-                & (point.y < centerY) & (point.y > (centerY - width))):
-            # the point in filter
-            inPoints.append(point)
-    return inPoints
-
+'''
 
 if __name__ == '__main__':
     curruntPointList = []
