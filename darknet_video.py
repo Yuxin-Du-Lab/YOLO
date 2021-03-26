@@ -193,15 +193,6 @@ def bufferProcess(buffer_queue, curruntArray):
     '''
     buffer_queue.check()
 
-'''
-def averageSize(PointList, num):
-    average = 0.0
-    if num > 0:
-        for point in PointList:
-            average += point.size
-        average /= num
-    return average
-'''
 
 if __name__ == '__main__':
     curruntPointList = []

@@ -31,3 +31,6 @@ class myQueue:
         sumArray /= len(self.list)
         return sumArray
 
+    def getAverageArray(self):
+        return self.average()
+
